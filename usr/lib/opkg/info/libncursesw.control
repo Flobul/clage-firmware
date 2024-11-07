@@ -1,0 +1,10 @@
+Package: libncursesw
+Version: 5.9-1
+Depends: libc
+Source: package/libs/ncurses
+License: FREE
+LicenseFiles: README
+Section: libs
+Architecture: ar71xx
+Installed-Size: 134150
+Description:  Terminal handling library (Unicode)

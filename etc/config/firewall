@@ -1,0 +1,10 @@
+
+config defaults
+	option syn_flood '1'
+	option input 'ACCEPT'
+	option output 'ACCEPT'
+	option forward 'REJECT'
+
+config include
+	option path '/etc/firewall.user'
+

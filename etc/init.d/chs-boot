@@ -1,0 +1,47 @@
+#!/bin/sh /etc/rc.common
+
+START=12
+
+CRON_BACKUP="/usr/sbin/chs-db backup"
+CRON_WATCHDOG="/usr/sbin/chs-cron watchdog"
+
+boot() {
+	#remove existing cron jobs
+	if grep -q "$CRON_WATCHDOG" /etc/crontabs/root 2> /dev/null ; then
+		sed -i -e "\\:$CRON_WATCHDOG:d" /etc/crontabs/root
+	fi
+	if grep -q "$CRON_BACKUP" /etc/crontabs/root 2> /dev/null ; then
+		sed -i -e "\\:$CRON_BACKUP:d" /etc/crontabs/root
+	fi
+
+	#init wifi configuration
+	wifi_restore=`uci get chsd.wifi.restore 2> /dev/null`
+	if [ -z "$wifi_restore" ]; then
+		#default setup not yet changed
+		uci delete chsd.wifi
+		uci set chsd.wifi="system"
+		uci set chsd.wifi.restore=2
+	fi
+
+	#clear disabled-flag, will be set by hotplug-script
+	uci set chsd.wifi.disabled=0
+	#disable radio, will be enabled while "/etc/init.d/chsd boot"
+	uci set wireless.radio0.disabled=1
+
+	#ensure that accidentally stored led-triggers (e.g. on usb-errors)
+	#do not create an endless flashing status LED
+	uci set system.led_sta.default=0
+	uci set system.led_sta.trigger="none" 2> /dev/null
+	uci delete system.led_sta.delayon 2> /dev/null
+	uci delete system.led_sta.delayoff 2> /dev/null
+
+	#save changes
+	uci commit
+	
+	#patch name of default lighttpd config file
+	if grep -q 'lighttpd\.conf' /etc/init.d/lighttpd 2> /dev/null ; then
+		sed -i -e 's/lighttpd\.conf/lighttpd-chsd.conf/' /etc/init.d/lighttpd
+	fi
+
+}
+

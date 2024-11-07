@@ -1,0 +1,10 @@
+Package: ldconfig
+Version: 0.9.33.2-1
+Source: package/libs/toolchain
+Section: utils
+Status: unknown hold not-installed
+Essential: yes
+Maintainer: Felix Fietkau <nbd@openwrt.org>
+Architecture: ar71xx
+Installed-Size: 8736
+Description:  Shared library path configuration

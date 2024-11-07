@@ -1,0 +1,12 @@
+BEGIN TRANSACTION;
+CREATE TABLE IF NOT EXISTS "devices" ("id" INTEGER PRIMARY KEY  AUTOINCREMENT  NOT NULL  UNIQUE,"uid" VARCHAR NOT NULL ,"busId" INTEGER NOT NULL  DEFAULT 0,"syncId" INTEGER NOT NULL  DEFAULT 0,"serial" VARCHAR,"serialPowerUnit" VARCHAR,"radioId" INTEGER,"enabled" INTEGER,"radioChannel" INTEGER,"radioAddress" INTEGER,"timeCreated" DATETIME,"timeModified" DATETIME, "swVersion" VARCHAR);
+CREATE TABLE IF NOT EXISTS "logs" ("id" INTEGER PRIMARY KEY  AUTOINCREMENT  NOT NULL  UNIQUE,"device_id" INTEGER,"usageTime" INTEGER,"usageDuration" INTEGER,"powerConsumption" INTEGER,"waterConsumption" INTEGER,"customId" INTEGER, "tap_id" INTEGER);
+CREATE TABLE IF NOT EXISTS "timers" ("id" INTEGER PRIMARY KEY  AUTOINCREMENT  NOT NULL  UNIQUE, "device_id" INTEGER, "enabled" BOOLEAN, "status" INTEGER, "type" INTEGER, "weekdays" INTEGER, "start" VARCHAR, "stop" VARCHAR, "setpoint" INTEGER);
+DROP TABLE IF EXISTS "users";
+CREATE TABLE "users" ("id" INTEGER PRIMARY KEY  AUTOINCREMENT  NOT NULL  UNIQUE, "name" VARCHAR, "password" VARCHAR, "defaultAccess" INTEGER, "knx" INTEGER, "modified" DATETIME DEFAULT CURRENT_TIMESTAMP);
+INSERT INTO "users" VALUES(1,'admin','geheim',65535,0,'2012-11-19 11:20:47');
+INSERT INTO "users" VALUES(2,'appadmin','control',65535,0,'2014-11-17 00:00:00');
+INSERT INTO "users" VALUES(3,'appuser','smart',14335,0,'2014-11-17 00:00:00');
+INSERT INTO "users" VALUES(4,'knxuser','connect',14335,1,'2014-12-17 00:00:00');
+INSERT INTO "users" VALUES(5,'knxadmin','control',16383,0,'2016-05-11 00:00:00');
+COMMIT;

@@ -1,0 +1,87 @@
+#!/bin/sh
+
+PID=$$
+SCRIPTNAME=`basename $0`
+PIDFILE=/tmp/$SCRIPTNAME.pid
+ENDEXECUTION=0
+
+if [ -f "$PIDFILE" ]; then
+    RUNNINGPID=`cat "$PIDFILE"`
+	PROGRAMPID=`ps | grep "$SCRIPTNAME" | grep -v grep | awk '{print $1;}'`
+	for PIDEL in $PROGRAMPID; do
+		if [ "$PIDEL" == "$RUNNINGPID" ]; then
+			ENDEXECUTION=1
+			break
+		fi
+	done
+fi
+
+if [ $ENDEXECUTION -eq 1 ]; then
+	echo "already running"
+	exit 1
+fi
+
+#writing PID to pidfile
+echo $PID > $PIDFILE
+
+#database folders & files
+DB_BAK_DIR="/root/.chsd"
+DB_TMP_DIR="/var/run/chsd"
+DB_FILE="chsd.sqlite"
+DB_SCHEME="chsd.sql"
+
+result=1
+case "$1" in
+	"restore")
+		#checking for root-config
+		LOG_MESSAGE="searching for $DB_BAK_DIR..."
+		if [ -d "$DB_BAK_DIR" ]; then
+			[ -d "$DB_TMP_DIR" ] || mkdir -m 0755 -p $DB_TMP_DIR
+			#creating fresh database if required
+			if [ -f "$DB_BAK_DIR/$DB_FILE" ]; then
+				LOG_MESSAGE="copying database to ramdisk"
+			else
+				LOG_MESSAGE="creating & copying database to ramdisk"
+				/usr/bin/sqlite3 $DB_BAK_DIR/$DB_FILE < $DB_BAK_DIR/$DB_SCHEME
+			fi
+			cp -a $DB_BAK_DIR/$DB_FILE $DB_TMP_DIR
+			result=$?
+		fi
+		;;
+
+	"backup")
+		LOG_MESSAGE="searching for $DB_TMP_DIR/$DB_FILE..."
+		if [ -f "$DB_TMP_DIR/$DB_FILE" ]; then
+			[ -d "$DB_BAK_DIR" ] || mkdir -m 0755 -p $DB_BAK_DIR
+			#checking if modified before copying to flash (reduce write cycles)
+			DB_BAK_STATUS=`ls -e $DB_BAK_DIR/$DB_FILE 2>/dev/null | awk '{ print $5 $6 $7 $8 $9 }'`
+			DB_TMP_STATUS=`ls -e $DB_TMP_DIR/$DB_FILE 2>/dev/null | awk '{ print $5 $6 $7 $8 $9 }'`
+			if [ "$DB_BAK_STATUS" != "$DB_TMP_STATUS" ]; then
+				LOG_MESSAGE="database modified - saving to flashdisk"
+				cp -a $DB_TMP_DIR/$DB_FILE $DB_BAK_DIR
+				result=$?
+			else
+				LOG_MESSAGE="database unchanged - skip saving"
+				result=0;
+			fi
+		fi
+		;;
+	*)
+		echo "USAGE: $SCRIPTNAME [backup|restore]"
+		;;
+esac
+
+#logging
+if [ -n "$LOG_MESSAGE" ]; then
+	if [ $result -eq 0 ]; then 
+		logger -p daemon.notice -t chs-db "$LOG_MESSAGE [OK]"
+	else
+		logger -p daemon.err -t chs-db "$LOG_MESSAGE [FAILED]"
+	fi
+fi
+
+#delete PID file
+rm -f $PIDFILE
+
+exit $result
+

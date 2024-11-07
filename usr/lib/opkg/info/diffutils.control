@@ -1,0 +1,9 @@
+Package: diffutils
+Version: 3.0-3
+Depends: libc
+Source: feeds/oldpackages/devel/diffutils
+Section: devel
+Architecture: ar71xx
+Installed-Size: 104242
+Description:  The Diffutils package contains programs that show the differences between
+ files or directories.

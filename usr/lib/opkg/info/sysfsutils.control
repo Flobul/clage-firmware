@@ -1,0 +1,11 @@
+Package: sysfsutils
+Version: 2.1.0-2
+Depends: libc, libsysfs
+Source: package/libs/sysfsutils
+License: GPLv2 LGPLv2.1
+LicenseFiles: COPYING cmd/GPL lib/LGPL
+Section: utils
+Maintainer: Jo-Philipp Wich <jow@openwrt.org>
+Architecture: ar71xx
+Installed-Size: 6586
+Description:  A utility built upon libsysfs that lists devices by bus, class, and topology.

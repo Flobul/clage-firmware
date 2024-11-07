@@ -1,0 +1,10 @@
+Package: kmod-nand-ar934x
+Version: 3.10.49-1
+Depends: kernel (=3.10.49-1-ad4a1886afa082e2ceec6caad2e71410), kmod-nand
+Source: package/kernel/linux
+License: GPLv2
+Section: kernel
+Status: unknown hold not-installed
+Architecture: ar71xx
+Installed-Size: 105
+Description:  Atheros AR934x NAND flash controller driver.

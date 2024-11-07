@@ -1,0 +1,9 @@
+rootfs / rootfs rw 0 0
+/dev/root / yaffs rw,noatime 0 0
+proc /proc proc rw,noatime 0 0
+sysfs /sys sysfs rw,noatime 0 0
+tmpfs /tmp tmpfs rw,nosuid,nodev,noatime 0 0
+tmpfs /dev tmpfs rw,relatime,size=512k,mode=755 0 0
+devpts /dev/pts devpts rw,relatime,mode=600 0 0
+debugfs /sys/kernel/debug debugfs rw,noatime 0 0
+mountd(pid1050) /tmp/run/mountd autofs rw,relatime,fd=5,pgrp=1048,timeout=60,minproto=5,maxproto=5,indirect 0 0

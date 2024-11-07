@@ -1,0 +1,5 @@
+/usr/bin/msmtpq
+/usr/bin/msmtp-queue
+/usr/bin/msmtp-runqueue.sh
+/usr/bin/msmtp-listqueue.sh
+/usr/bin/msmtp-enqueue.sh

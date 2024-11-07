@@ -1,0 +1,105 @@
+#!/bin/sh
+
+PID=$$
+TMP_WIFISCAN="/tmp/wifiscan.$PID"
+TMP_ONECELL0="/tmp/wifiscan0.$PID"
+TMP_ONECELL1="/tmp/wifiscan1.$PID"
+
+JSON=1
+if [ "$1" == "-t" ]; then
+	#force tab-separated output instead of json
+	JSON=0
+fi
+
+errorcode=0
+iwlist wlan0 scanning 1> "$TMP_WIFISCAN" 2> /dev/null #save scan results to a temp file
+scan_ok=$(grep "wlan" "$TMP_WIFISCAN") #check if the scanning was ok with wlan0
+if [ -z "$scan_ok" ]; then
+	#WIFI scanning failed.
+	errorcode=-1
+else
+	n_results=$(grep -c "ESSID:" "$TMP_WIFISCAN") #save number of scanned cell
+	i=1
+	wlan_array=""
+	while [ "$i" -le "$n_results" ]; do
+		if [ $i -lt 10 ]; then
+			cell=$(echo "Cell 0$i - Address:")
+		else
+			cell=$(echo "Cell $i - Address:")
+		fi
+		j=`expr $i + 1`
+		if [ $j -lt 10 ]; then
+			nextcell=$(echo "Cell 0$j - Address:")
+		else
+			nextcell=$(echo "Cell $j - Address:")
+		fi
+		awk -v v1="$cell" '$0 ~ v1 {p=1}p' "$TMP_WIFISCAN" | awk -v v2="$nextcell" '$0 ~ v2 {exit}1' > "$TMP_ONECELL0" #store only one cell info in a temp file
+
+		wifibssid=$(grep " Address:" "$TMP_ONECELL0" | awk '{print $5}')
+		wifissid=$(grep "ESSID:" "$TMP_ONECELL0" | awk '{ sub(/^[ \t]+/, ""); print }' | awk '{gsub("ESSID:", "");print}' | awk '{ if (substr($0, 1, 1) == "\"") { len=length($0); printf "%s", substr($0, 2, len-2) } }')
+
+		grep -v ESSID "$TMP_ONECELL0" > "$TMP_ONECELL1" # delete ESSID line to avoid later grep mistakes
+		rm -f "$TMP_ONECELL0"
+
+		wifichannel=$(grep " Channel:" "$TMP_ONECELL1")
+		wifichannel=$(echo "$wifichannel" | awk '{gsub(" Channel:", "");print}' | awk '{ sub(/^[ \t]+/, ""); print }') #get clean wifi channel
+		wifisecurity=$(grep " WEP" "$TMP_ONECELL1") #check if encryption mode is WEP
+		if [ -n "$wifisecurity" ]; then   #check if $wifisecurity is not an empty string
+			wifisecurity="wep"
+		else
+			wifisecurity=$(grep "WPA2 " "$TMP_ONECELL1") #check if encryption mode is WPA2
+			if [ -n "$wifisecurity" ]; then
+				wifisecurity="psk2"
+			else
+				wifisecurity=$(grep "WPA " "$TMP_ONECELL1") #check if encryption mode is WPA
+				if [ -n "$wifisecurity" ]; then
+					wifisecurity="psk"
+				else
+					wifisecurity="none"
+				fi
+			fi
+		fi
+		wifisignal=$(grep "Quality=" "$TMP_ONECELL1" | awk '{ sub(/^[ \t]+/, ""); print }' | awk '{gsub("Quality=", "");print}' | awk -F '/70' '{print $1}')
+		wifisignal=$(awk -v v3=$wifisignal 'BEGIN{ print v3 * 10 / 7}')
+		wifisignal=${wifisignal%.*}
+		if [ "$i" = "1" ]; then
+			comma=""
+		else
+			comma=","
+		fi
+		
+		if [ $JSON -ne 0 ]; then
+			wlan_array="$wlan_array$comma{\"id\":$i,\"ssid\":\"$wifissid\",\"bssid\":\"$wifibssid\",\"channel\":\"$wifichannel\",\"security\":\"$wifisecurity\",\"signal\":\"$wifisignal\"}"
+		else
+			#remove "" from SSID
+			#wifissid=`echo $wifissid | awk '{ if (substr($0, 1, 1) == "\"") { len=length($0); printf "%s", substr($0, 2, len-2) } }'`
+			printf "$i\t$wifissid\t$wifibssid\t$wifichannel\t$wifisecurity\t$wifisignal\n"
+		fi
+        i=`expr $i + 1`
+	done
+	rm -f "$TMP_ONECELL1"
+fi
+rm -f "$TMP_WIFISCAN"
+
+#get current wifi setup
+curr_disabled=`uci get wireless.radio0.disabled 2> /dev/null`
+curr_channel=`uci get wireless.radio0.channel 2> /dev/null`
+curr_mode=`uci get wireless.@wifi-iface[0].mode 2> /dev/null`
+curr_ssid=`uci get wireless.@wifi-iface[0].ssid 2> /dev/null`
+curr_bssid=`uci get wireless.@wifi-iface[0].bssid 2> /dev/null`
+curr_security=`uci get wireless.@wifi-iface[0].encryption 2> /dev/null`
+#`uci get wireless.@wifi-iface[0].key 2> /dev/null`
+curr_key="null"
+wifisetup="\"setup\":{\"mode\":\"$curr_mode\",\"ssid\":\"$curr_ssid\",\"bssid\":\"$curr_bssid\",\"channel\":\"$curr_channel\",\"security\":\"$curr_security\",\"key\":$curr_key,\"disabled\":\"$curr_disabled\"}"
+
+if [ $JSON -ne 0 ]; then
+	#output JSON string
+	printf "{\"wlan\":[$wlan_array],$wifisetup,\"error\":$errorcode}"
+fi
+
+if [ $errorcode -lt 0 ]; then
+	exit 1
+else
+	exit 0
+fi
+

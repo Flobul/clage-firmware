@@ -1,0 +1,8 @@
+#!/bin/sh
+if [ -z "${IPKG_INSTROOT}" ]; then
+    if [ -f "/etc/init.d/chsd" ]; then
+		#Stopping chsd
+		/etc/init.d/chsd stop
+    fi
+fi
+exit 0

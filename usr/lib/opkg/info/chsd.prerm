@@ -1,0 +1,7 @@
+#!/bin/sh
+if [ -z "${IPKG_INSTROOT}" ]; then
+	#Removing rc.d symlink for chsd
+	/etc/init.d/chsd disable
+	/etc/init.d/chsd stop
+fi
+exit 0

@@ -1,0 +1,75 @@
+#!/bin/sh
+
+PID=$$
+SCRIPTNAME=`basename $0`
+PIDFILE=/tmp/$SCRIPTNAME.pid
+ENDEXECUTION=0
+
+if [ -f "$PIDFILE" ]; then
+    RUNNINGPID=`cat "$PIDFILE"`
+	PROGRAMPID=`ps | grep "$SCRIPTNAME" | grep -v grep | awk '{print $1;}'`
+	for PIDEL in $PROGRAMPID; do
+		if [ "$PIDEL" == "$RUNNINGPID" ]; then
+			ENDEXECUTION=1
+			break
+		fi
+	done
+fi
+
+if [ $ENDEXECUTION -eq 1 ]; then
+	echo "already running"
+	exit 1
+fi
+
+#writing PID to pidfile
+echo $PID > $PIDFILE
+
+result=0
+case "$1" in
+	"watchdog")
+		#if chsd is not running/responding (timeout = 10 sec), restart daemon!
+		port=`uci get chsd.server.port 2> /dev/null`
+		if ! curl -s -m 10 127.0.0.1:$port &> /dev/null ; then
+			LOG_MESSAGE="chsd not responding - trying to restart..."
+			/etc/init.d/chsd restart
+			result=$?
+			trigger=`uci get system.led_sta.trigger 2> /dev/null`
+			if [ $result -eq 0 ]; then
+				if [ "$trigger" == "timer" ]; then
+					#stop flashing STA led
+					uci set system.led_sta.trigger="none" 2> /dev/null
+					/etc/init.d/led reload &>/dev/null
+					#restore previous led status
+					/etc/init.d/led reload &>/dev/null
+				fi
+			else
+				if [ "$trigger" != "timer" ]; then
+					#start flashing STA led
+					uci set system.led_sta.trigger="timer" 2> /dev/null
+					uci set system.led_sta.delayon=125
+					uci set system.led_sta.delayoff=125
+					/etc/init.d/led reload &>/dev/null
+				fi
+			fi
+		fi
+		;;
+	*)
+		echo "USAGE: $SCRIPTNAME [watchdog]"
+		result=1
+		;;
+esac
+
+#logging
+if [ -n "$LOG_MESSAGE" ]; then
+	if [ $result -eq 0 ]; then 
+		logger -p daemon.notice -t chs-cron "$LOG_MESSAGE [OK]"
+	else
+		logger -p daemon.err -t chs-cron "$LOG_MESSAGE [FAILED]"
+	fi
+fi
+
+#delete PID file
+rm -f $PIDFILE
+
+exit $result
+

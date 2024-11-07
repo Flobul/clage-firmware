@@ -1,0 +1,10 @@
+Package: kmod-ledtrig-gpio
+Version: 3.10.49-1
+Depends: kernel (=3.10.49-1-ad4a1886afa082e2ceec6caad2e71410)
+Source: package/kernel/linux
+License: GPLv2
+Section: kernel
+Status: unknown hold not-installed
+Architecture: ar71xx
+Installed-Size: 2294
+Description:  Kernel module that allows LEDs to be controlled by gpio events

@@ -1,0 +1,165 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+BIN="/usr/sbin/chsd"
+
+WIFI_DEFAULT_SSID="CLAGE-HS"
+WIFI_DEFAULT_SECURITY="psk2"
+WIFI_DEFAULT_KEY="Warmwasser"
+WIFI_DEFAULT_CHANNEL="6"
+WIFI_DEFAULT_TXPOWER="17"
+WIFI_DEFAULT_COUNTRY="DE"
+
+CRON_BACKUP="/usr/sbin/chs-db backup"
+CRON_WATCHDOG="/usr/sbin/chs-cron watchdog"
+
+boot() {
+	#if wifi disabled due to active eth0 interface (clan), do not enable access point mode!
+	#also prevent automatic connection to configured wifi-network after 3 minutes!
+	wifi_disabled=`uci get chsd.wifi.disabled 2> /dev/null`
+	wifi_restore=`uci get chsd.wifi.restore 2> /dev/null`
+
+	#disable wifi
+	wifi down
+	
+	#preparing system
+	/usr/sbin/chs-init
+	
+	#save current wifi settings, if customized setup exists and no restore jobs pending
+	if [ "$wifi_restore" == "0" ]; then
+		curr_country=`uci get wireless.radio0.country 2> /dev/null`
+		curr_channel=`uci get wireless.radio0.channel 2> /dev/null`
+		curr_mode=`uci get wireless.@wifi-iface[0].mode 2> /dev/null`
+		curr_ssid=`uci get wireless.@wifi-iface[0].ssid 2> /dev/null`
+		curr_bssid=`uci get wireless.@wifi-iface[0].bssid 2> /dev/null`
+		curr_security=`uci get wireless.@wifi-iface[0].encryption 2> /dev/null`
+		curr_key=`uci get wireless.@wifi-iface[0].key 2> /dev/null`
+		curr_network=`uci get wireless.@wifi-iface[0].network 2> /dev/null`
+		uci delete chsd.wifi
+		uci set chsd.wifi="system"
+		uci set chsd.wifi.restore=1
+		uci set chsd.wifi.country="$curr_country"
+		uci set chsd.wifi.channel="$curr_channel"
+		uci set chsd.wifi.mode="$curr_mode"
+		uci set chsd.wifi.ssid="$curr_ssid"
+		uci set chsd.wifi.bssid="$curr_bssid"
+		uci set chsd.wifi.security="$curr_security"
+		uci set chsd.wifi.key="$curr_key"
+		uci set chsd.wifi.network="$curr_network"
+	fi
+	uci commit chsd
+
+	#get server id
+	server_id=`uci get chsd.server.id 2> /dev/null`
+	if [ -z "$server_id" ]; then
+		server_id="000000000000"
+	fi
+	server_id_short=`echo "$server_id" | cut -c9-12`
+
+	if [ "$wifi_disabled" != "1" ]; then
+		#turn status led on
+		uci set system.led_sta.default=1
+		/etc/init.d/led reload &>/dev/null
+
+		#start always with default wifi mode, if no ethernet attached
+		uci set wireless.radio0.disabled=0
+		uci set wireless.radio0.channel="$WIFI_DEFAULT_CHANNEL"
+		uci set wireless.radio0.hwmode="11ng"
+		uci set wireless.radio0.htmode="HT20"
+		uci set wireless.radio0.txpower="$WIFI_DEFAULT_TXPOWER"
+		uci set wireless.radio0.country="$WIFI_DEFAULT_COUNTRY"
+		uci set wireless.@wifi-iface[0].mode="ap"
+		uci set wireless.@wifi-iface[0].network="lan"
+		uci set wireless.@wifi-iface[0].ssid="$WIFI_DEFAULT_SSID""-""$server_id_short"
+		uci set wireless.@wifi-iface[0].encryption="$WIFI_DEFAULT_SECURITY"
+		uci set wireless.@wifi-iface[0].key="$WIFI_DEFAULT_KEY"
+		uci commit wireless
+		wifi
+
+		#update service
+		/etc/init.d/avahi-daemon restart
+
+		#restoring wifi settings in 3 minutes
+		( sleep 180s; /usr/sbin/chs-wifirestore ) &
+	fi
+
+	#starting daemon
+	start
+}
+
+start() {
+	#do not start if already running
+	service_check $BIN
+	if [ $? -eq 0 ]; then
+		return 0
+	fi
+
+	#loading settings
+	config_load "chsd"
+	local port channel address keepalive verbosity forced_connect server_id loglimit
+	config_get address server address 0
+	config_get server_id server id "000000000000"
+	config_get port server port 8080
+	config_get channel server channel 106
+	config_get keepalive server keepalive 60
+	config_get forced_connect server forced_connect 0
+	config_get verbosity server verbosity 0
+	config_get loglimit server loglimit 100
+	
+	#calculating individual server address from 100..199
+	if [ "$address" -lt 100 ]; then
+		#take last 6 bytes of 16 byte md5 hash
+		server_id_hash='0x'`echo "$server_id" | md5sum | cut -c5-16`
+		address=$((($server_id_hash % 100) + 100))
+		uci set chsd.server.address="$address"
+		uci commit chsd
+	fi
+
+	/usr/sbin/chs-db restore &> /dev/null || return 1
+
+	tries=0
+	while [ $tries -lt 5 ]; do
+		tries=$((tries + 1))                               
+		service_start $BIN -p$port -c$channel -a$address -s$server_id -f$forced_connect -k$keepalive -v$verbosity -l$loglimit
+		sleep 1s
+		service_check $BIN
+		result=$?
+		if [ $result -eq 0 ]; then
+			break
+		fi
+	done
+	
+	#create cron jobs
+	[ -f "/etc/crontabs/root" ] || touch /etc/crontabs/root
+	if ! grep -q "$CRON_BACKUP" /etc/crontabs/root ; then
+		echo "*/15 * * * *	$CRON_BACKUP" >> /etc/crontabs/root
+	fi
+	if ! grep -q "$CRON_WATCHDOG" /etc/crontabs/root ; then
+		echo "*/1 * * * *	$CRON_WATCHDOG" >> /etc/crontabs/root
+	fi
+	/etc/init.d/cron restart
+
+	return $result
+}
+
+stop() {
+	#remove cron jobs
+	if grep -q "$CRON_WATCHDOG" /etc/crontabs/root 2> /dev/null ; then
+		sed -i -e "\\:$CRON_WATCHDOG:d" /etc/crontabs/root
+	fi
+	if grep -q "$CRON_BACKUP" /etc/crontabs/root 2> /dev/null ; then
+		sed -i -e "\\:$CRON_BACKUP:d" /etc/crontabs/root
+	fi
+	/etc/init.d/cron restart
+
+	#stop daemon
+	service_stop $BIN
+	result=$?
+	
+	/usr/sbin/chs-db backup &> /dev/null || return 1
+	
+	return $result
+}
+

@@ -1,0 +1,149 @@
+#!/bin/sh
+
+. /lib/ar71xx.sh
+
+NET_DEFAULT_IP="192.168.204.204"
+NET_DEFAULT_MASK="255.255.255.0"
+SYS_DEFAULT_TZNAME="Europe/Berlin"
+SYS_DEFAULT_TZ="CET-1CEST,M3.5.0,M10.5.0/3"
+
+#prepare file system for use with chsd
+[ -d "/tmp/.chsd/update" ] || {
+	mkdir -m 0755 -p /tmp/.chsd/update
+}
+
+[ -d "/www/files/config" ] || {
+	mkdir -m 0755 -p /www/files/config
+}
+
+[ -d "/www/files/update" ] || {
+	ln -s /tmp/.chsd/update /www/files/update
+}
+
+#reset to factory defaults or do first time init
+#triggered if server-id is not set (e.g. first boot)
+server_id=`uci get chsd.server.id 2> /dev/null`
+if [ -z "$server_id" ]; then
+
+	#configure defaults for legacy devices/firmwares
+	NET_IFNAME_DHCP_S="eth1"
+	NET_IFNAME_DHCP_C="eth0"
+	uci set system.led_sta="led"
+	uci set system.led_sta.name="STA"
+	uci set system.led_sta.default=0
+	uci set system.led_sta.trigger="none"
+	uci set system.led_sta.sysfs="rb750:green:act"
+
+	#re-configure hardware specific settings
+	case $(ar71xx_board_name) in
+		rb-751)
+			logger -p daemon.notice -t chs-init "RB751U-2HnD detected"
+			;;
+		rb-951g-2hnd)
+			logger -p daemon.notice -t chs-init "RB951G-2HnD detected"
+			NET_IFNAME_DHCP_S="eth0.2"
+			NET_IFNAME_DHCP_C="eth0.1"
+			uci set system.led_sta.sysfs="rb:green:act"
+			;;
+		rb-951ui-2hnd)
+			logger -p daemon.notice -t chs-init "RB951Ui-2HnD detected"
+			NET_IFNAME_DHCP_S="eth0"
+			NET_IFNAME_DHCP_C="eth1"
+			uci set system.led_sta.sysfs="rb:green:act"
+			;;
+		*)
+			logger -p daemon.warn -t chs-init "unknown hardware detected"
+			;;
+	esac
+	
+	#remove avahi-daemon default services
+	rm -f /etc/avahi/services/http.service
+	rm -f /etc/avahi/services/ssh.service
+
+	#disable uhttpd if enabled - we use lighttpd
+	if [ -f "/etc/init.d/uhttpd" ]; then
+		/etc/init.d/uhttpd enabled && {
+			/etc/init.d/uhttpd disable
+			/etc/init.d/uhttpd stop &
+		}
+	fi
+
+	#disable watchcat
+	if [ -f "/etc/init.d/watchcat" ]; then
+		/etc/init.d/watchcat enabled && {
+			/etc/init.d/watchcat disable
+			/etc/init.d/watchcat stop &
+		}
+	fi
+
+	#disable firewall
+	if [ -f "/etc/init.d/firewall" ]; then
+		/etc/init.d/firewall enabled && {
+			/etc/init.d/firewall disable
+			/etc/init.d/firewall stop
+		}
+	fi
+
+	#cleaning default firewall rules
+	while uci delete firewall.@zone[-1] 2> /dev/null; do :; done
+	while uci delete firewall.@forwarding[-1] 2> /dev/null; do :; done
+	while uci delete firewall.@rule[-1] 2> /dev/null; do :; done
+
+	#reconfigure network interfaces
+	#1) diagnotic port: dhcp server
+	uci delete network.wan6 2> /dev/null
+	uci delete network.wan 2> /dev/null
+	uci delete network.lan 2> /dev/null
+	uci set network.lan="interface"
+	uci set network.lan.ifname="$NET_IFNAME_DHCP_S"
+	uci set network.lan.type="bridge"
+	uci set network.lan.proto="static"
+	uci set network.lan.ipaddr="$NET_DEFAULT_IP"
+	uci set network.lan.netmask="$NET_DEFAULT_MASK"
+
+	#2) 4-port-switch/vlan: dhcp client
+	uci delete network.clan 2> /dev/null
+	uci set network.clan="interface"
+	uci set network.clan.ifname="$NET_IFNAME_DHCP_C"
+	uci set network.clan.proto="dhcp"
+
+	#3) wlan: dhcp client
+	uci delete network.wlan 2> /dev/null
+	uci set network.wlan="interface"
+	uci set network.wlan.proto="dhcp"
+
+	#4) changing dhcp server default settings
+	uci delete dhcp.@dnsmasq[0].interface 2> /dev/null
+	uci add_list dhcp.@dnsmasq[0].interface="br-lan"
+	uci set dhcp.@dnsmasq[0].authoritative=0
+	uci delete dhcp.lan 2> /dev/null
+	uci delete dhcp.wan 2> /dev/null
+	uci set dhcp.lan="dhcp"
+	uci set dhcp.lan.interface="lan"
+	uci set dhcp.lan.start=100
+	uci set dhcp.lan.limit=100
+	uci set dhcp.lan.leasetime="12h"
+
+	#create server id from mac address of ethernet port 1
+	server_id=`cat /sys/class/net/$NET_IFNAME_DHCP_S/address 2>/dev/null | sed -e 'y/abcdef/ABCDEF/; s/://g'`
+	if [ -n "$server_id" ]; then
+		#configure default timezone/hostname 
+		server_id_short=`echo "$server_id" | cut -c9-12`
+		hostname="chs-""$server_id_short"
+		echo "$hostname" > /proc/sys/kernel/hostname
+		uci set system.@system[0].hostname="$hostname"
+		uci set system.@system[0].zonename="$SYS_DEFAULT_TZNAME"
+		uci set system.@system[0].timezone="$SYS_DEFAULT_TZ"
+		uci set chsd.server.id="$server_id"
+	fi
+
+	#commit all changes and reload network settings
+	uci commit
+	/etc/init.d/dnsmasq stop
+	/etc/init.d/network restart
+	/etc/init.d/dnsmasq start
+	logger -p daemon.notice -t chs-init "restoring factory settings finished"
+fi
+
+exit 0
+

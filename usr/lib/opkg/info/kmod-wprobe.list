@@ -1,0 +1,2 @@
+/etc/modules.d/01-wprobe
+/lib/modules/3.10.49/wprobe.ko

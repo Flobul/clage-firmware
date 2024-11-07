@@ -1,0 +1,12 @@
+
+config chsd 'server'
+	option port '8080'
+	option channel '106'
+	option verbosity '0'
+	option keepalive '60'
+	option id 'CCFFE0FF36FF'
+	option address '146'
+
+config system 'wifi'
+	option restore '2'
+	option disabled '1'

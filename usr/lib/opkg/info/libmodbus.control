@@ -1,0 +1,9 @@
+Package: libmodbus
+Version: 3.0.6-1
+Depends: libc
+Source: feeds/packages/libs/libmodbus
+Section: libs
+Maintainer: Michael Heimpold <mhei@heimpold.de>
+Architecture: ar71xx
+Installed-Size: 12266
+Description:  A Modbus library for Linux, Mac OS X, FreeBSD, QNX and Win32

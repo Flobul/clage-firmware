@@ -1,0 +1,7 @@
+/usr/bin/clean-devinfo
+/etc/config/mactodevinfo
+/usr/lib/mac-to-devinfo/devinfo-functions.sh
+/usr/share/mac-to-devinfo/macdevdb
+/usr/bin/ip-to-devinfo
+/usr/bin/prep-devinfo
+/usr/bin/mac-to-devinfo

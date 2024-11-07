@@ -1,0 +1,8 @@
+Package: libzip
+Version: 0.10.1-1
+Depends: libc, zlib
+Source: feeds/oldpackages/libs/libzip
+Section: libs
+Architecture: ar71xx
+Installed-Size: 18505
+Description:  C library for reading, creating, and modifying zip archives

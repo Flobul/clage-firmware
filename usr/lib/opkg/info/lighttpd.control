@@ -1,0 +1,9 @@
+Package: lighttpd
+Version: 1.4.35-2
+Depends: libc, libopenssl, libpcre, libpthread
+Source: feeds/packages/net/lighttpd
+Section: net
+Maintainer: W. Michael Petullo <mike@flyn.org>
+Architecture: ar71xx
+Installed-Size: 78620
+Description:  A flexible and lightweight web server

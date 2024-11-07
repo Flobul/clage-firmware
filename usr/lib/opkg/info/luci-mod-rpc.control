@@ -1,0 +1,9 @@
+Package: luci-mod-rpc
+Version: 0.12+git-16.038.38474-0d510b2-1
+Depends: libc, luci-lib-json
+Source: feeds/luci/contrib/package/luci
+Section: luci
+Maintainer: LuCI Development Team <luci@lists.subsignal.org>
+Architecture: ar71xx
+Installed-Size: 2665
+Description:  LuCI RPC - JSON-RPC API

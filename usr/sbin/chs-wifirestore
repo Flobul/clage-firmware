@@ -1,0 +1,116 @@
+#!/bin/sh
+
+PID=$$
+TMP_WIFIRESTORE="/tmp/wifirestore.$PID"
+
+wifi_restore=`uci get chsd.wifi.restore 2> /dev/null`
+wifi_disabled=`uci get wireless.radio0.disabled 2> /dev/null`
+
+if [ $wifi_disabled -eq 0 ] && [ $wifi_restore -eq 1 ]; then
+
+	#save current wifi setup
+	curr_country=`uci get wireless.radio0.country 2> /dev/null`
+	curr_channel=`uci get wireless.radio0.channel 2> /dev/null`
+	curr_mode=`uci get wireless.@wifi-iface[0].mode 2> /dev/null`
+	curr_ssid=`uci get wireless.@wifi-iface[0].ssid 2> /dev/null`
+	curr_bssid=`uci get wireless.@wifi-iface[0].bssid 2> /dev/null`
+	curr_security=`uci get wireless.@wifi-iface[0].encryption 2> /dev/null`
+	curr_key=`uci get wireless.@wifi-iface[0].key 2> /dev/null`
+	curr_network=`uci get wireless.@wifi-iface[0].network 2> /dev/null`
+
+	#restore previous wifi setup, if
+	# - chs-wifisetup was not called during first 3 minutes after boot-up
+	# - customized wifi setup exists
+	wifi_mode=`uci get chsd.wifi.mode 2> /dev/null`
+	wifi_ssid=`uci get chsd.wifi.ssid 2> /dev/null`
+	uci set wireless.radio0.country="`uci get chsd.wifi.country 2> /dev/null`"
+	uci set wireless.radio0.channel="`uci get chsd.wifi.channel 2> /dev/null`"
+	uci set wireless.@wifi-iface[0].mode="$wifi_mode"
+	uci set wireless.@wifi-iface[0].ssid="$wifi_ssid"
+	uci set wireless.@wifi-iface[0].bssid="`uci get chsd.wifi.bssid 2> /dev/null`"
+	uci set wireless.@wifi-iface[0].encryption="`uci get chsd.wifi.security 2> /dev/null`"
+	uci set wireless.@wifi-iface[0].key="`uci get chsd.wifi.key 2> /dev/null`"
+	uci set wireless.@wifi-iface[0].network="`uci get chsd.wifi.network 2> /dev/null`"
+	uci commit wireless
+	wifi
+
+	for tries in 1 2; do
+
+		#check if successful:
+		j=0
+		k=0
+		for i in 1 2 3 4 5 6 7 8 9; do
+			sleep 1s
+			if [ "$wifi_mode" == "sta" ]; then
+				iw dev wlan0 link 2>/dev/null | grep -i -q 'SSID:.*'
+			else
+				iw dev 2>/dev/null | grep -i -q 'wlan'
+			fi
+			if [ $? -eq 0 ]; then
+				j=`expr $j + 1`	#ok
+			else
+				k=`expr $k + 1`	#failed
+			fi
+			logger -p daemon.info -t chs-wifirestore "try $i/9 (ok=$j, err=$k)"
+		done
+
+		#error on connection?
+		if [ $k -gt $j ]; then
+
+			#on 1st error:
+			if [ $tries -eq 1 ]; then
+				#Try to find another network with same ssid. If multiple found, use that one with best signal.
+				#SIGNAL	SSID	BSSID	CHANNEL	SECURITY
+				chs-wifiscan -t | awk 'BEGIN { FS = "\t" } ; { if ($2 == "'"$wifi_ssid"'") { print $6"\t"$2"\t"$3"\t"$4"\t"$5 } }' | sort -n -r > $TMP_WIFIRESTORE
+				#get only first line (highest signal value sorted first)
+				new_bssid=`head -q -n 1 $TMP_WIFIRESTORE | awk 'BEGIN { FS = "\t" } { print $3 }'`
+				if [ -z "$new_bssid" ]; then
+					logger -p daemon.notice -t chs-wifirestore "no matching network found with same ssid"
+					#skip this loop round
+					continue
+				fi
+				new_channel=`head -q -n 1 $TMP_WIFIRESTORE | awk 'BEGIN { FS = "\t" } { print $4 }'`
+				new_security=`head -q -n 1 $TMP_WIFIRESTORE| awk 'BEGIN { FS = "\t" } { print $5 }'`
+				rm -f $TMP_WIFIRESTORE
+				uci set wireless.radio0.channel="$new_channel"
+				uci set wireless.@wifi-iface[0].bssid="$new_bssid"
+				uci set wireless.@wifi-iface[0].encryption="$new_security"
+				logger -p daemon.notice -t chs-wifirestore "matching network found: ssid=$wifi_ssid, bssid=$new_bssid, channel=$new_channel, security=$new_security"
+
+			#on 2nd error:
+			else
+				logger -p daemon.err -t chs-wifirestore "restore failed - resetting to previous mode"
+				#if not successful again, reset to default ap mode
+				uci set wireless.radio0.country="$curr_country"
+				uci set wireless.radio0.channel="$curr_channel"
+				uci set wireless.@wifi-iface[0].mode="$curr_mode"
+				uci set wireless.@wifi-iface[0].ssid="$curr_ssid"
+				uci set wireless.@wifi-iface[0].bssid="$curr_bssid"
+				uci set wireless.@wifi-iface[0].encryption="$curr_security"
+				uci set wireless.@wifi-iface[0].key="$curr_key"
+				uci set wireless.@wifi-iface[0].network="$curr_network"
+			fi
+
+			uci commit wireless
+			wifi
+
+		#no error:
+		else
+			logger -p daemon.notice -t chs-wifirestore "restore successful"
+			#setup successful, clearing status if not 0
+			if [ $wifi_restore -ne 0 ]; then
+				uci set chsd.wifi.restore=0
+				uci commit chsd
+				#turn status led off
+				uci set system.led_sta.default=0
+				/etc/init.d/led reload &>/dev/null
+			fi
+			#exit loop
+			break
+		fi
+	done
+	/etc/init.d/avahi-daemon restart &
+fi
+
+exit 0
+

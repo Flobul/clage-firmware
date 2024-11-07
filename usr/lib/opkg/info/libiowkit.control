@@ -1,0 +1,9 @@
+Package: libiowkit
+Version: 1.5.0-1
+Depends: libc, libpthread, kmod-usb-iowarrior
+Source: feeds/clage/libs/libiowkit
+Section: libs
+Architecture: ar71xx
+Installed-Size: 4714
+Description:  This library provides access to IO-Warriors by Code Mercenaries.
+ http://www.codemercs.com

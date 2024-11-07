@@ -1,0 +1,9 @@
+Package: netdiscover-to-devinfo
+Version: 1.0.0-2
+Depends: libc, mac-to-devinfo, netdiscover
+Source: feeds/oldpackages/net/mac-to-devinfo
+Section: net
+Architecture: ar71xx
+Installed-Size: 1090
+Description:  A script to use netdiscover to discover all devices on the specified
+ arp-able networks and translate into the device information.

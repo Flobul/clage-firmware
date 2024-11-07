@@ -1,0 +1,3 @@
+#!/bin/sh
+/bin/opkg list-installed | awk '{print $1"="$3}' | sed ':M;N;$!bM;s#\n#,#g'
+

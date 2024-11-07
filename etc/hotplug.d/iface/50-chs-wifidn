@@ -1,0 +1,19 @@
+#!/bin/sh
+
+if [ "$ACTION" = ifup ] && [ "$INTERFACE" = "clan" ]; then
+	logger -p daemon.notice -t chs-wifidn "disabling wifi, now using device $DEVICE ($INTERFACE) for connectivity"
+	wifi_disabled=`uci get wireless.radio0.disabled 2> /dev/null`
+	if [ $wifi_disabled -eq 0 ]; then
+		uci set wireless.radio0.disabled=1
+		uci commit wireless
+		wifi down
+		#turn status led off
+		uci set system.led_sta.default=0
+		/etc/init.d/led reload &>/dev/null
+	fi
+	#set flag, only to be used in "/etc/init.d/chsd"
+	uci set chsd.wifi.disabled=1
+	uci commit chsd
+fi
+
+exit 0

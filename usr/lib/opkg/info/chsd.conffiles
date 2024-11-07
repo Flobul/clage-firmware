@@ -1,0 +1,3 @@
+/etc/config/chsd
+/etc/avahi/services/clage-hs.service
+/etc/lighttpd/lighttpd-chsd.conf

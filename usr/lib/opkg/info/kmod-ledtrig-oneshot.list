@@ -1,0 +1,2 @@
+/etc/modules.d/50-ledtrig-oneshot
+/lib/modules/3.10.49/ledtrig-oneshot.ko

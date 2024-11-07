@@ -1,0 +1,8 @@
+Package: libzip-utils
+Version: 0.10.1-1
+Depends: libc, libzip
+Source: feeds/oldpackages/libs/libzip
+Section: utils
+Architecture: ar71xx
+Installed-Size: 6654
+Description:  package contains binaries from libzip library (zipcmp, ziptorrent, zipmerge)

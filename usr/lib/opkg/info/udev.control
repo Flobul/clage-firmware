@@ -1,0 +1,10 @@
+Package: udev
+Version: 173-1
+Depends: libc, librt
+Source: package/system/udev
+Section: base
+Maintainer: Geoff Levand <geoff@infradead.org>
+Architecture: ar71xx
+Installed-Size: 196334
+Description:  udev allows Linux users to have a dynamic /dev directory and it
+ provides the ability to have persistent device names.

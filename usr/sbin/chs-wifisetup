@@ -1,0 +1,150 @@
+#!/bin/sh
+
+WIFI_DEFAULT_CHANNEL="6"
+
+#clear pending restore job
+wifi_restore=`uci get chsd.wifi.restore 2> /dev/null`
+wifi_disabled=`uci get wireless.radio0.disabled 2> /dev/null`
+if [ $wifi_disabled -eq 0 ] && [ $wifi_restore -eq 1 ]; then
+	uci set chsd.wifi.restore=0
+	uci commit chsd
+fi
+
+#save current wifi setup
+curr_country=`uci get wireless.radio0.country 2> /dev/null`
+curr_channel=`uci get wireless.radio0.channel 2> /dev/null`
+curr_mode=`uci get wireless.@wifi-iface[0].mode 2> /dev/null`
+curr_ssid=`uci get wireless.@wifi-iface[0].ssid 2> /dev/null`
+curr_bssid=`uci get wireless.@wifi-iface[0].bssid 2> /dev/null`
+curr_security=`uci get wireless.@wifi-iface[0].encryption 2> /dev/null`
+curr_key=`uci get wireless.@wifi-iface[0].key 2> /dev/null`
+curr_network=`uci get wireless.@wifi-iface[0].network 2> /dev/null`
+
+wifi_channel="$curr_channel"
+wifi_mode="$curr_mode"
+
+json=`printf "$1" | sed -e 's/[{}]//g'`
+properties=""
+i=0
+for property in "country" "channel" "ssid" "bssid" "security" "key" "mode"; do
+	parsed1=`printf "$json" | grep -i -o '"'$property'"[[:space:]]*:[[:space:]]*[^,]*'`
+	parsed2=`printf "$parsed1" | sed -e 's/^\"[^:]*:[[:space:]]*//; s/[[:space:]]*$//; s/\"//g'`
+	if [ -n "$parsed1" ]; then
+		case "$property" in
+			"country")
+				uci set wireless.radio0.country="$parsed2"
+				;;
+			"channel")
+				wifi_channel="$parsed2"
+				;;
+			"ssid")
+				uci set wireless.@wifi-iface[0].ssid="$parsed2"
+				;;
+			"bssid")
+				uci set wireless.@wifi-iface[0].bssid="$parsed2"
+				;;
+			"security")
+				uci set wireless.@wifi-iface[0].encryption="$parsed2"
+				;;
+			"key")
+				uci set wireless.@wifi-iface[0].key="$parsed2"
+				;;
+			"mode")
+				wifi_mode="$parsed2"
+				uci set wireless.@wifi-iface[0].mode="$parsed2"
+				;;
+			*)
+				;;
+		esac
+		if [ $i -eq 0 ]; then
+			comma=""
+		else
+			comma=","
+		fi
+		properties="$properties$comma\"$property\":$parsed2"
+
+		i=`expr $i + 1`
+	fi
+done
+#check, if properties found
+if [ -n "$properties" ]; then
+	error=0
+	properties="{$properties}"
+else
+	error=-1
+	properties="null"
+fi
+
+#output JSON string
+printf "{\"setup\":$properties,\"error\":$error}"
+
+if [ $error -eq 0 ]; then
+
+	#select correct network interface
+	if [ "$wifi_mode" == "sta" ]; then
+		uci set wireless.@wifi-iface[0].network="wlan"
+	else
+		uci set wireless.@wifi-iface[0].network="lan"
+		#auto channel only supported in station (client) mode
+		if [ "$wifi_channel" == "auto" ]; then
+			wifi_channel="$WIFI_DEFAULT_CHANNEL"
+		fi
+	fi
+	uci set wireless.radio0.channel="$wifi_channel"
+
+	#enable new settings...
+	uci commit wireless
+	wifi
+
+	#in client mode:
+	#if successfully connected (no password errors etc.), 'iw dev wlan0 link' outputs 
+	#SSID of connected network
+	#
+	#in ap mode:
+	#only if wifi interface is down (e.g. password too short) 'iw dev' returns no output
+
+	j=0
+	k=0
+	for i in 1 2 3 4 5 6 7 8 9; do
+		sleep 1s
+		if [ "$wifi_mode" == "sta" ]; then
+			iw dev wlan0 link 2>/dev/null | grep -i -q 'SSID:.*'
+		else
+			iw dev 2>/dev/null | grep -i -q 'wlan'
+		fi
+		if [ $? -eq 0 ]; then
+			j=`expr $j + 1`	#ok
+		else
+			k=`expr $k + 1`	#failed
+		fi
+		logger -p daemon.info -t chs-wifisetup "try $i/9 (ok=$j, err=$k)"
+	done
+
+	if [ $k -gt $j ]; then
+		logger -p daemon.err -t chs-wifisetup "setup failed - resetting to previous mode"
+		#restore previous setup on errors
+		uci set wireless.radio0.country="$curr_country"
+		uci set wireless.radio0.channel="$curr_channel"
+		uci set wireless.@wifi-iface[0].mode="$curr_mode"
+		uci set wireless.@wifi-iface[0].ssid="$curr_ssid"
+		uci set wireless.@wifi-iface[0].bssid="$curr_bssid"
+		uci set wireless.@wifi-iface[0].encryption="$curr_security"
+		uci set wireless.@wifi-iface[0].key="$curr_key"
+		uci set wireless.@wifi-iface[0].network="$curr_network"
+		uci commit wireless
+		wifi
+	else
+		logger -p daemon.notice -t chs-wifisetup "setup successful"
+		#setup successful, clearing status if not 0
+		if [ $wifi_restore -ne 0 ]; then
+			uci set chsd.wifi.restore=0
+			uci commit chsd
+			#turn status led off
+			uci set system.led_sta.default=0
+			/etc/init.d/led reload &>/dev/null
+		fi
+	fi
+	/etc/init.d/avahi-daemon restart &
+fi
+
+exit 0

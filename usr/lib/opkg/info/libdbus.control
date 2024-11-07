@@ -1,0 +1,10 @@
+Package: libdbus
+Version: 1.8.8-1
+Depends: libc, librt
+Source: feeds/packages/utils/dbus
+License: AFL-2.1
+Section: utils
+Maintainer: Steven Barth <cyrus@openwrt.org>
+Architecture: ar71xx
+Installed-Size: 92980
+Description:  Simple interprocess messaging system (library)

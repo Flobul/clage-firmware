@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+# based on sysfixtime
+# Copyright (C) 2013-2014 OpenWrt.org
+
+START=01
+
+boot() {
+	local curtime="$(date +%s)"
+	local maxtime="$(find /root -type f -exec date -r {} +%s \; | sort -nr | head -n1)"
+	[ $curtime -lt $maxtime ] && date -s @$maxtime
+}
+

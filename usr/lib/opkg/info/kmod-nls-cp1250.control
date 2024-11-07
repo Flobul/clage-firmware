@@ -1,0 +1,10 @@
+Package: kmod-nls-cp1250
+Version: 3.10.49-1
+Depends: kernel (=3.10.49-1-ad4a1886afa082e2ceec6caad2e71410), kmod-nls-base
+Source: package/kernel/linux
+License: GPLv2
+Section: kernel
+Status: unknown hold not-installed
+Architecture: ar71xx
+Installed-Size: 1982
+Description:  Kernel module for NLS Codepage 1250 (Eastern Europe)

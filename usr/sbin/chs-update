@@ -1,0 +1,169 @@
+#!/bin/sh
+export PATH=/usr/bin:/usr/sbin:/bin:/sbin
+
+#defaults
+MSG=""
+CODE=0
+REBOOT=0
+UPGRADE_DIR="/tmp/.chsd/update/"
+TMPUPG_DIR="/tmp/.chsd/upg/"
+UPGRADE_MODE=0
+
+# PID - pid of the current script
+PID=$$
+# SCRIPTNAME - current name of the script without directory prefix
+SCRIPTNAME=`basename $0`
+# PIDFILE - where to write the current pid
+PIDFILE=/tmp/$SCRIPTNAME.pid
+# ENDEXECUTION - if 1 then stop script, if 0 everything is ok and continue
+ENDEXECUTION=0
+
+if [ -f "$PIDFILE" ]; then
+    RUNNINGPID=`cat "$PIDFILE"`
+	PROGRAMPID=`ps | grep "$SCRIPTNAME" | grep -v grep | awk '{print $1;}'`
+	for PIDEL in $PROGRAMPID; do
+		if [ "$PIDEL" == "$RUNNINGPID" ]; then
+			ENDEXECUTION=1
+			break
+		fi
+	done
+fi
+
+if [ $ENDEXECUTION -eq 1 ]; then
+	echo "code=-1,msg=Update already running."
+	exit 1
+fi
+
+# writing PID to pidfile
+echo $PID > $PIDFILE
+
+#cleaning data of previous upgrades
+if [ -d "$TMPUPG_DIR" ]; then
+	rm -r $TMPUPG_DIR
+fi
+
+k=0
+#Installing all upg-files in WebDAV resource "/files/update"
+for i in `ls "$UPGRADE_DIR"*.upg 2> /dev/null`; do
+	k=`expr $k + 1`
+
+	#if one update fails, stop everything!
+	if [ $CODE -lt 0 ]; then
+		break
+	fi
+
+	#extracting upg
+	UNZIP_DIR="$TMPUPG_DIR$k/"
+	mkdir -p "$UNZIP_DIR"
+	unzip -o "$i" -d "$UNZIP_DIR" &> /dev/null
+	if [ $? -ne 0 ]; then
+		CODE=-4
+		break
+	fi
+
+	#checking md5
+	for j in `tr ' ' ':' < "$UNZIP_DIR"md5sums`; do
+		set `echo $j | tr ':' ' '`
+		MD5_HASH=$1
+		MD5_FILE=$2
+		MD5_CURR=`md5sum "$UNZIP_DIR$MD5_FILE" | awk '/\.ipk/ {print $1}'`
+		if [ "$MD5_CURR" != "$MD5_HASH" ]; then
+			CODE=-6
+			if [ -z "$MSG" ]; then
+				MSG="$MD5_FILE"
+			else
+				MSG="$MSG,$MD5_FILE"
+			fi
+		fi
+	done
+
+	#run opkg if no errors
+	if [ $CODE -ge 0 ]; then
+		REBOOTFILE=$UNZIP_DIR".reboot"
+		PREINSTFILE=$UNZIP_DIR".preinst"
+		POSTINSTFILE=$UNZIP_DIR".postinst"
+		OPKGOPTIONSFILE=$UNZIP_DIR".opkg-options"
+
+		ls "$UNZIP_DIR"*.ipk &> /dev/null
+		if [ $? -eq 0 ]; then
+			#launch pre installation script if existing
+			if [ -f "$PREINSTFILE" ]; then
+				CMD=`sh $PREINSTFILE $CODE 2> /dev/null`
+				if [ -n "$CMD" ]; then
+					CODE=$CMD
+				fi
+			fi
+			#Install available packages, use special options from file
+			OPKGOPTIONS=`cat "$OPKGOPTIONSFILE" 2> /dev/null | tr -d '\n'`
+			opkg $OPKGOPTIONS install "$UNZIP_DIR"*.ipk &> /dev/null
+			if [ $? -eq 0 ]; then
+				CODE=1
+			else
+				CODE=-2
+			fi
+			#Reboot after installation?
+			if [ -f "$REBOOTFILE" ]; then
+				REBOOT=1
+			fi
+			#launch post installation script if existing
+			if [ -f "$POSTINSTFILE" ]; then
+				CMD=`sh $POSTINSTFILE $CODE 2> /dev/null`
+				if [ -n "$CMD" ] ; then
+					CODE=$CMD
+				fi
+			fi
+		fi
+	fi
+done
+
+#no upgrade file found?
+if [ $k -eq 0 ]; then
+	CODE=-7
+fi
+
+#no reboot on errors!
+if [ $REBOOT -eq 1 ] && [ $CODE -eq 1 ]; then
+	CODE=2
+else
+	REBOOT=0
+fi
+
+#build status message
+case $CODE in
+	2)	MSG="Update successful. Rebooting..."
+		;;
+	1)	MSG="Update successful."
+		;;
+	0)	MSG="Software is up to date."
+		;;
+	-2)	MSG="Update failed. Server online."
+		;;
+	-3)	MSG="Update failed. Server offline."
+		;;
+	-4)	MSG="Invalid upgrade file."
+		;;
+	-5)	#MSG="missing packages"
+		;;
+	-6)	#MSG="faulty packages"
+		;;
+	-7)	MSG="No upgrade file found."
+		;;
+	*)	MSG="Unknown error."
+		;;
+esac
+
+#script output
+echo "code=$CODE,msg=$MSG"
+
+#cleaning upgrade files in /files/update
+rm -f "$UPGRADE_DIR"*.upg
+
+#reboot in 10 seconds if triggered
+if [ $REBOOT -eq 1 ]; then
+	reboot -d 10 &
+fi
+
+#delete PID file
+rm $PIDFILE &> /dev/null
+
+exit 0

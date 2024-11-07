@@ -1,0 +1,9 @@
+Package: netdiscover
+Version: 0.3-beta6-3
+Depends: libc, libpcap, libnet1, libpthread
+Source: feeds/oldpackages/net/netdiscover
+Section: net
+Maintainer: Daniel Dickinson <openwrt@cshore.neomailbox.net>
+Architecture: ar71xx
+Installed-Size: 142824
+Description:  An active/passive address reconnaissance tool

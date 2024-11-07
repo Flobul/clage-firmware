@@ -1,0 +1,9 @@
+Package: openssh-client-utils
+Version: 6.6p1-1
+Depends: libc, libopenssl, zlib, openssh-client, openssh-keygen
+Source: feeds/packages/net/openssh
+Section: net
+Maintainer: Peter Wagner <tripolar@gmx.at>
+Architecture: ar71xx
+Installed-Size: 640762
+Description:  OpenSSH client utilities.

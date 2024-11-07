@@ -1,0 +1,9 @@
+Package: watchcat
+Version: 1-5
+Depends: libc
+Source: feeds/oldpackages/utils/watchcat
+Section: utils
+Maintainer: Nuno Goncalves <nunojpg@gmail.com>
+Architecture: ar71xx
+Installed-Size: 2050
+Description:  Allows to configure a periodically reboot, or after loosing internet connectivity. Configured trough UCI /etc/config/system.

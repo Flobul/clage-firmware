@@ -1,0 +1,2 @@
+*/15 * * * *	/usr/sbin/chs-db backup
+*/1 * * * *	/usr/sbin/chs-cron watchdog

@@ -1,0 +1,9 @@
+Package: luci-app-ddns
+Version: 0.12+git-16.038.38474-0d510b2-1
+Depends: libc, ddns-scripts
+Source: feeds/luci/contrib/package/luci-addons
+Section: luci
+Maintainer: LuCI Development Team <luci@lists.subsignal.org>
+Architecture: ar71xx
+Installed-Size: 11550
+Description:  Dynamic DNS configuration module

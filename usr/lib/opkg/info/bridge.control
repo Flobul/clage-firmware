@@ -1,0 +1,9 @@
+Package: bridge
+Version: 1.5-2
+Depends: libc
+Source: feeds/oldpackages/net/bridge-utils
+Section: net
+Architecture: ar71xx
+Installed-Size: 8012
+Description:  Manage ethernet bridging: a way to connect networks together to
+ form a larger network.

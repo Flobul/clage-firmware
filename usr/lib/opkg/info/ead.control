@@ -1,0 +1,10 @@
+Package: ead
+Version: 1
+Depends: libc
+Source: package/network/services/ead
+Section: net
+Maintainer: Felix Fietkau <nbd@openwrt.org>
+Architecture: ar71xx
+Installed-Size: 44483
+Description:  Provides remote access to your device even if IP and firewall
+ configuration settings are defunct

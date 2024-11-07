@@ -1,0 +1,9 @@
+<?xml version="1.0" standalone='no'?><!--*-nxml-*-->
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+ <name replace-wildcards="yes">CLAGE Home Server (%h)</name>
+  <service>
+   <type>_clage-hs._tcp</type>
+   <port>443</port>
+  </service>
+</service-group>

@@ -1,0 +1,9 @@
+Package: kmod-wprobe
+Version: 3.10.49+1-2
+Depends: kernel (=3.10.49-1-ad4a1886afa082e2ceec6caad2e71410)
+Source: feeds/oldpackages/net/wprobe
+Section: kernel
+Maintainer: Felix Fietkau <nbd@openwrt.org>
+Architecture: ar71xx
+Installed-Size: 7422
+Description:  A module that exports measurement data from wireless driver to user space
