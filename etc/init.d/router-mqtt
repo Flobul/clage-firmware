@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+start() {
+        /usr/bin/router-mqtt.sh >/tmp/router-mqtt.out 2>/tmp/router-mqtt.err &
+        echo $! > /var/run/router-mqtt.pid
+}
+
+stop() {
+        /usr/bin/router-mqtt.sh stop >/dev/null 2>&1
+        kill "$(cat /var/run/router-mqtt.pid 2>/dev/null)" 2>/dev/null
+        rm -f /var/run/router-mqtt.pid
+}
