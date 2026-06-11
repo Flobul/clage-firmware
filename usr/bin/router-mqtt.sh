@@ -2,6 +2,12 @@
 
 . /etc/router-mqtt.conf
 
+# Auto-derive DISCOVERY_ID (MAC, no colons, uppercase) and TOPIC (chs-XXXX) if not set in conf
+_MAC="$(cat /sys/class/net/br-lan/address 2>/dev/null | tr -d ':' | tr 'a-z' 'A-Z')"
+[ -n "$DISCOVERY_ID" ] || DISCOVERY_ID="${_MAC:-000000000000}"
+[ -n "$TOPIC" ] || TOPIC="chs-${DISCOVERY_ID#????????}"
+unset _MAC
+
 BASE_TELE="tele/$TOPIC"
 BASE_STAT="stat/$TOPIC"
 BASE_CMND="cmnd/$TOPIC"
@@ -360,18 +366,6 @@ publish_chsd() {
         pub "$BASE_TELE/CHSD" "{\"Time\":$(date +%s),\"TX\":{\"Total\":$TX_TOTAL,\"Percent\":$TX_PERCENT,\"R\":$TX_R,\"E\":$TX_E},\"RX\":{\"Total\":$RX_TOTAL,\"Percent\":$RX_PERCENT,\"S\":$RX_S,\"S2\":$RX_S2,\"M\":$RX_M,\"M2\":$RX_M2,\"L\":$RX_L,\"L2\":$RX_L2,\"I\":$RX_I,\"O\":$RX_O},\"RF\":{\"LastRSSI\":$LAST_RSSI,\"LastLQI\":$LAST_LQI,\"LastBus\":\"$LAST_BUS\",\"LastDevice\":\"$LAST_DEVICE\"}}"
 }
 
-publish_clage() {
-        curl -ks -o /tmp/router-mqtt-clage.json -w "%{http_code}" "https://admin:geheim@127.0.0.1/devices" > /tmp/router-mqtt-code
-
-        CODE="$(cat /tmp/router-mqtt-code 2>/dev/null)"
-        if [ "$CODE" = "200" ]; then
-                pub "$BASE_TELE/CLAGE" "$(cat /tmp/router-mqtt-clage.json)"
-                pub "$BASE_TELE/SENSOR" "{\"Time\":$(date +%s),\"CLAGE\":{\"ApiOk\":1},\"CHSD\":{\"TxTotal\":$(readv tx_total),\"RxTotal\":$(readv rx_total),\"LastRSSI\":$(readv last_rssi),\"LastLQI\":$(readv last_lqi)}}"
-        else
-                pub "$BASE_TELE/SENSOR" "{\"Time\":$(date +%s),\"CLAGE\":{\"ApiOk\":0,\"HttpCode\":$CODE},\"CHSD\":{\"TxTotal\":$(readv tx_total),\"RxTotal\":$(readv rx_total)}}"
-        fi
-}
-
 publish_all() {
         publish_state
         publish_chsd
@@ -385,11 +379,13 @@ publish_clage_devices() {
         CODE="$(cat /tmp/router-mqtt-devices-code 2>/dev/null)"
         if [ "$CODE" != "200" ]; then
                 pub "tele/$TOPIC/CLAGE" "{\"Time\":\"$(iso_time)\",\"ApiOk\":0,\"HttpCode\":$CODE}"
+                pub "$BASE_TELE/SENSOR" "{\"Time\":$(date +%s),\"CLAGE\":{\"ApiOk\":0,\"HttpCode\":$CODE},\"CHSD\":{\"TxTotal\":$(readv tx_total),\"RxTotal\":$(readv rx_total)}}"
                 return
         fi
 
         # JSON complet brut, utile pour Jeedom/Node-RED/Home Assistant
         pub "tele/$TOPIC/CLAGE" "$(cat /tmp/router-mqtt-devices.json)"
+        pub "$BASE_TELE/SENSOR" "{\"Time\":$(date +%s),\"CLAGE\":{\"ApiOk\":1},\"CHSD\":{\"TxTotal\":$(readv tx_total),\"RxTotal\":$(readv rx_total),\"LastRSSI\":$(readv last_rssi),\"LastLQI\":$(readv last_lqi)}}"
 
         # Si jsonfilter est dispo, on publie aussi un résumé par appareil
         if command -v jsonfilter >/dev/null 2>&1; then
