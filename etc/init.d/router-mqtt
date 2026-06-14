@@ -3,13 +3,148 @@
 START=99
 STOP=10
 
+SERVICE="/usr/bin/router-mqtt.sh"
+CONFIG="/etc/router-mqtt.conf"
+PIDFILE="/var/run/router-mqtt.pid"
+OUTFILE="/tmp/router-mqtt.out"
+ERRFILE="/tmp/router-mqtt.err"
+
+EXTRA_COMMANDS="status restart_log"
+EXTRA_HELP="        status       Show router-mqtt status
+        restart_log  Restart service and tail logs"
+
+is_running() {
+        pid="$(cat "$PIDFILE" 2>/dev/null)"
+        [ -n "$pid" ] || return 1
+        kill -0 "$pid" 2>/dev/null
+}
+
+kill_pidfile() {
+        f="$1"
+        pid="$(cat "$f" 2>/dev/null)"
+        if [ -n "$pid" ]; then
+                kill "$pid" 2>/dev/null
+                sleep 1
+                kill -9 "$pid" 2>/dev/null
+        fi
+        rm -f "$f"
+}
+
 start() {
-        /usr/bin/router-mqtt.sh >/tmp/router-mqtt.out 2>/tmp/router-mqtt.err &
-        echo $! > /var/run/router-mqtt.pid
+        if is_running; then
+                echo "router-mqtt already running, pid $(cat "$PIDFILE")"
+                return 0
+        fi
+
+        if [ ! -x "$SERVICE" ]; then
+                echo "$SERVICE not found or not executable"
+                return 1
+        fi
+
+        if [ ! -f "$CONFIG" ]; then
+                echo "$CONFIG not found"
+                return 1
+        fi
+
+        mkdir -p /var/run
+        mkdir -p /tmp/router-mqtt-state
+
+        rm -f "$OUTFILE" "$ERRFILE"
+
+        logger -t router-mqtt "starting"
+
+        "$SERVICE" >>"$OUTFILE" 2>>"$ERRFILE" &
+        echo $! > "$PIDFILE"
+
+        sleep 2
+
+        if is_running; then
+                logger -t router-mqtt "started, pid $(cat "$PIDFILE")"
+                echo "router-mqtt started, pid $(cat "$PIDFILE")"
+                return 0
+        else
+                logger -t router-mqtt "failed to start"
+                echo "router-mqtt failed to start"
+                [ -s "$ERRFILE" ] && tail -20 "$ERRFILE"
+                rm -f "$PIDFILE"
+                return 1
+        fi
 }
 
 stop() {
-        /usr/bin/router-mqtt.sh stop >/dev/null 2>&1
-        kill "$(cat /var/run/router-mqtt.pid 2>/dev/null)" 2>/dev/null
-        rm -f /var/run/router-mqtt.pid
+        logger -t router-mqtt "stopping"
+
+        if [ -x "$SERVICE" ]; then
+                "$SERVICE" stop >/dev/null 2>&1
+        fi
+
+        kill_pidfile "$PIDFILE"
+
+        kill_pidfile /tmp/router-mqtt.log.pid
+        kill_pidfile /tmp/router-mqtt.tele.pid
+        kill_pidfile /tmp/router-mqtt.cmnd.pid
+
+        # Sécurité : tue les restes éventuels du script, sans toucher à mosquitto_pub/sub globalement.
+        ps | grep '[r]outer-mqtt.sh' | awk '{print $1}' | while read pid; do
+                [ -n "$pid" ] && kill "$pid" 2>/dev/null
+        done
+
+        sleep 1
+
+        ps | grep '[r]outer-mqtt.sh' | awk '{print $1}' | while read pid; do
+                [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null
+        done
+
+        rm -f "$PIDFILE"
+
+        logger -t router-mqtt "stopped"
+        echo "router-mqtt stopped"
+}
+
+restart() {
+        stop
+        sleep 2
+        start
+}
+
+status() {
+        if is_running; then
+                echo "router-mqtt is running, master pid $(cat "$PIDFILE")"
+        else
+                echo "router-mqtt is not running"
+        fi
+
+        echo
+        echo "Sub-processes:"
+        for f in /tmp/router-mqtt.log.pid /tmp/router-mqtt.tele.pid /tmp/router-mqtt.cmnd.pid; do
+                pid="$(cat "$f" 2>/dev/null)"
+                if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                        echo "  $f: running pid $pid"
+                else
+                        echo "  $f: stopped"
+                fi
+        done
+
+        echo
+        echo "Matching processes:"
+        ps | grep '[r]outer-mqtt.sh'
+
+        echo
+        echo "Last stdout:"
+        tail -10 "$OUTFILE" 2>/dev/null
+
+        echo
+        echo "Last stderr:"
+        tail -20 "$ERRFILE" 2>/dev/null
+}
+
+restart_log() {
+        restart
+        sleep 2
+        echo
+        echo "=== /tmp/router-mqtt.err ==="
+        tail -40 "$ERRFILE" 2>/dev/null
+        echo
+        echo "=== logread ==="
+        logread | grep router-mqtt | tail -40
 }
